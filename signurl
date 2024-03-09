@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+# vim ft=ruby
+# frozen_string_literal: true
+
+require 'uri'
+require 'bundler'
+
+Bundler.setup
+
+require 'aws-sdk-s3'
+require 'dotenv/load'
+
+region = ENV.fetch('AWS_REGION', 'us-east-1')
+
+client = Aws::S3::Client.new(region: region)
+
+bucket, key = if ARGV[0] =~ %r{\As3://}
+                uri = URI.parse(ARGV[0])
+                [uri.host, uri.path[1..]]
+              else
+                [ENV['S3_BUCKET'], ARGV[0]]
+              end
+
+# Ensure we don't have a leading slash
+key = key[1..] if key[0] == '/'
+
+raise 'No DEFAULT_S3_BUCKET set in .env file.' if bucket.nil?
+
+object = Aws::S3::Object.new(client: client, bucket_name: bucket, key: key)
+
+expiry_seconds = ENV.fetch(DEFAULT_S3_EXPIRY, '86400').to_i
+
+if object.size.positive?
+  print object.presigned_url(:get, expires_in: expiry_seconds * 7)
+else
+  puts "#{ARVG[0]} not found."
+  exit 1
+end
